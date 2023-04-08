@@ -19,9 +19,9 @@ published: true
 ## 参考にさせていただいた記事
 
 - [Zenn: cert-manager基礎知識](https://zenn.dev/masaaania/articles/e54119948bbaa2)
-    - cert managerについて詳しく書かれている
+    - cert managerについて詳しく書かれていて大変参考になりました。
 - [Qiita: Centos7サーバーで1からKubernetes環境を構築しIngressでの外部公開・TLSの設定まで行う](https://qiita.com/bindingpry/items/0299e4e063e6f871e40e#certificate%E3%81%AE%E4%BD%9C%E6%88%90)
-    - k8sの構築から、Certmanagerの立て方まで詳しく説明されている。しかし、cert managerのversionが今使っているものと異なっていた。
+    - k8sの構築から、Certmanagerの立て方まで詳しく説明されている。しかし、cert managerのversionがこの記事で使用している内容と異なっている。
 - [Ingress - HTTPS通信(Cert Manager)](https://developer.mamezou-tech.com/containers/k8s/tutorial/ingress/https/)
     - tls通信をさせるために自己証明書でのcert-managerの設定方法とそれを発展させたLet’s encryptでのcert-managerの設定方法を解説している。チャレンジの方法がdnsではないため、僕の環境では認証できなかった。
 
