@@ -2,14 +2,15 @@
 title: "オンプレk8sのpodにSSLで通信をさせるための方法メモ"
 emoji: "📝"
 type: "tech" # tech: 技術記事 / idea: アイデア
-topics: []
-published: false
+topics: ["Kubernetes", "SSL"]
+published: true
 ---
 
 ## 前提条件
 
 - k8s上でingress が使用できること
-- k8s上でservice typeでloadbalancerを使用することができること
+- k8s上でservice.type:loadbalancerを使用することができること
+- ドメインを一つ以上所持していること
 
 ## 概要
 
@@ -27,7 +28,7 @@ published: false
 ## 設定までの流れ
 
 1. Cert-managerをインストールする
-2.  Issuerを作成する
+2. Issuerを作成する
 3. Certificateをデプロイする
 4. Ingressを作成し、SSL証明書を指定する
 
@@ -95,7 +96,7 @@ issuerには
 
 ### 2-1. Issuerのデプロイ
 
- 今回は、lets encryptの証明書を自動で入手＋管理をしてくれるようにissuerを作成する。
+今回は、lets encryptの証明書を自動で入手＋管理をしてくれるようにissuerを作成する。
 
 以下のyamlを作成する
 
@@ -140,7 +141,7 @@ spec:
 
 ### 2-2. Issuerのsolverが使用するaws key などの準備
 
-cluster issuer に、ドメインの持ち主であることを証明するために、route 53の場合、cluster issuerにAWS access key と AWS accesskey secretを教えておく必要がある。
+issuer に、ドメインの持ち主であることを証明するために、route 53の場合、issuerにAWS access key と AWS accesskey secretを教えておく必要がある。
 
 それは、2-1のyamlの、spec.solvers.dns01.route53の部分で指定することができる。
 
@@ -164,14 +165,14 @@ secret-access-keyの項目に、base64エンコードしたシークレットキ
 
 ### 3-3 Issuer のデプロイ
 
-以下コマンドでデプロイすることで、issuerをデプロイできる
+以下コマンドでデプロイすることで、issuerをapplyできる
 
 ```bash
 kubectl apply -f aws_secret_key.yaml
 kubectl apply -f cluster_issuer.yaml
 ```
 
-実際にSSL証明書を使用したいnamespaceにapplyする必要がある
+注意：ここでは実際にSSL証明書を使用したいnamespaceにapplyする必要がある
 
 ## 3. Certificateをデプロイする
 
@@ -186,12 +187,12 @@ apiVersion:
 cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: home-srkr-dev
+  name: example-tls # 好きな名前を指定
 spec:
-  secretName: home-srkr-dev-tls
+  secretName: <先ほどapplyしたissuerが作成したsecret>
   dnsNames:
-  - home.srkr.dev
-  - "*.home.srkr.dev"
+  - example.example.com # 登録したいドメイン名
+  - "*.example.example.com" # サブドメイン全てで使いたい場合はこのようにワイルドカードを指定できる
   issuerRef:
     name: letsencrypt-issuer
     kind: Issuer
@@ -215,10 +216,6 @@ spec:
 
 ```yaml
 kubectl apply -f certificate.yaml
-kubectl apply -f certificate.yaml -n dev
-kubectl apply -f certificate.yaml -n prod
-kubectl apply -f certificate.yaml -n staging
-kubectl apply -f certificate.yaml -n argocd
 ```
 
 ここで、使用したいnamespaceにそれぞれデプロイしないと、SSL通信がうまくできない。（できる方法あるのかな）
@@ -228,7 +225,7 @@ kubectl apply -f certificate.yaml -n argocd
 ```bash
 $ kubectl get secret
 NAME                          TYPE                                  DATA   AGE
-home-srkr-dev-tls             kubernetes.io/tls                     2      25h
+example-tls             kubernetes.io/tls                     2      25h
 ```
 
 先ほど指定した名前で作成されていることを確認できればおk
@@ -238,6 +235,8 @@ home-srkr-dev-tls             kubernetes.io/tls                     2      25h
 最後に、ingressを使用して、ドメインを与えましょう。
 
 route53で取得したドメインでingressをたて、先ほど作成したcertificateを指定することで、SSL/TLS通信をすることができるようになる。
+
+この例は、k8sでIngressを使用することができるようになっており、既にnginxのpodがサービス名nginx-serviceとして公開されていることが前提となっております。
 
 以下サンプルのingress
 
@@ -258,10 +257,10 @@ spec:
   tls:
   - hosts:
       - example.example.example.com #Route53で登録したAレコードのドメイン名
-    secretName: home-srkr-dev-tls # certificateで指定したsecretの名前
+    secretName: example-tls # certificateで指定したsecretの名前
   ingressClassName: "nginx"
   rules:
-    - host: test.home.srkr.dev #Route53で登録したAレコードのドメイン名
+    - host: example.example.example.com #Route53で登録したAレコードのドメイン名
       http:
         paths:
           - backend:
@@ -288,12 +287,14 @@ kubectl apply -f ingress.yaml
 
 ※オンプレでやっている場合には、80 と443がingressのIPにポートフォワーディングされるように設定しておかないと接続できない
 
-![スクリーンショット 2022-09-04 15.36.24.png](/images/31cbfdb8e1bcbd/k8s%E3%82%AF%E3%83%A9%E3%82%B9%E3%82%BF%E3%81%ABssl%E3%81%A6%E3%82%99%E9%80%9A%E4%BF%A1%E3%81%95%E3%81%9B%E3%82%8B%20217f3fa24bc741b0b07abf5859d673cc/%25E3%2582%25B9%25E3%2582%25AF%25E3%2583%25AA%25E3%2583%25BC%25E3%2583%25B3%25E3%2582%25B7%25E3%2583%25A7%25E3%2583%2583%25E3%2583%2588_2022-09-04_15.36.24.png)
+![スクリーンショット 2022-09-04 15.36.24.png](/images/31cbfdb8e1bcbd/%E3%82%B9%E3%82%AF%E3%83%AA%E3%83%BC%E3%83%B3%E3%82%B7%E3%83%A7%E3%83%83%E3%83%88_2022-09-04_15.36.24.png)
 
-やったね。
+ちゃんと鍵マークがつきましたね！（これはオンプレのargoCD serverに鍵をつけた例です、urlなどは今回の例とは異なります）
 
-![スクリーンショット 2022-09-04 15.36.58.png](/images/31cbfdb8e1bcbd/k8s%E3%82%AF%E3%83%A9%E3%82%B9%E3%82%BF%E3%81%ABssl%E3%81%A6%E3%82%99%E9%80%9A%E4%BF%A1%E3%81%95%E3%81%9B%E3%82%8B%20217f3fa24bc741b0b07abf5859d673cc/%25E3%2582%25B9%25E3%2582%25AF%25E3%2583%25AA%25E3%2583%25BC%25E3%2583%25B3%25E3%2582%25B7%25E3%2583%25A7%25E3%2583%2583%25E3%2583%2588_2022-09-04_15.36.58.png)
+![スクリーンショット 2022-09-04 15.36.58.png](/images/31cbfdb8e1bcbd/%E3%82%B9%E3%82%AF%E3%83%AA%E3%83%BC%E3%83%B3%E3%82%B7%E3%83%A7%E3%83%83%E3%83%88_2022-09-04_15.36.58.png)
 
 ちゃんと証明書も確認できる
 
-以上！ご指摘いただける点などございましたら、お手数ですがコメントにいただけると幸いです
+以上。オンプレのIngressにSSLを設定する方法でした。
+
+かなり備忘録として作ってしまっている部分がございますので、もし不可解な点などございましたら、後学のためにお手数ですがご指摘いただけると幸いです。
